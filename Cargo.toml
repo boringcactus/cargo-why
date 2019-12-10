@@ -1,0 +1,18 @@
+[package]
+name = "cargo-why"
+version = "0.1.0"
+authors = ["Melody Horn <melody@boringcactus.com>"]
+edition = "2018"
+license = "MIT"
+description = "traces dependency paths to show why a crate was required"
+repository = "https://github.com/boringcactus/cargo-why"
+readme = "README.md"
+keywords = ["cli", "cargo-subcommand", "dependencies", "crates", "cargo"]
+categories = ["development-tools::cargo-plugins"]
+
+[badges]
+maintenance = { status = "passively-maintained" }
+
+[dependencies]
+cargo_metadata = "0.9.1"
+failure = "0.1.6"
