@@ -35,8 +35,9 @@ fn main() -> Result<(), Error> {
         Some(x) => x,
         None => bail!("No dependency resolution found"),
     };
-    let root = resolve.root.clone().ok_or_else(|| format_err!("No dependency resolution root"))?;
-    search(vec![&root], &resolve, &target);
+    for root in metadata.workspace_members {
+        search(vec![&root], &resolve, &target);
+    }
     Ok(())
 }
 
@@ -56,6 +57,10 @@ fn search(history: Vec<&PackageId>, resolve: &Resolve, target: &str) {
         Some(&x) => x,
         None => return,
     };
+    if history[0..history.len() - 1].contains(&curr) {
+        // avoid infinite recursion
+        return;
+    }
     let node = resolve.nodes.iter().find(|node| node.id == *curr);
     let node = match node {
         Some(x) => x,
