@@ -1,6 +1,6 @@
 [package]
 name = "cargo-why"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Melody Horn <melody@boringcactus.com>"]
 edition = "2018"
 license = "MIT"

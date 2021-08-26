@@ -1,8 +1,10 @@
 #[macro_use]
 extern crate failure;
 
+use std::collections::{HashMap, HashSet};
+
+use cargo_metadata::{Metadata, PackageId, Resolve};
 use failure::Error;
-use cargo_metadata::{PackageId, Resolve};
 
 fn main() -> Result<(), Error> {
     let (target, other_flags) = {
@@ -31,28 +33,82 @@ fn main() -> Result<(), Error> {
     let mut cmd = cargo_metadata::MetadataCommand::new();
     cmd.other_options(other_flags);
     let metadata = cmd.exec()?;
-    let resolve = match metadata.resolve {
+    let resolve = match &metadata.resolve {
         Some(x) => x,
         None => bail!("No dependency resolution found"),
     };
-    for root in metadata.workspace_members {
-        search(vec![&root], &resolve, &target);
+
+    let mut chains = Vec::new();
+
+    for root in &metadata.workspace_members {
+        search(vec![root], resolve, &target, &mut chains);
     }
+
+    print_chains(&chains, &metadata);
+
     Ok(())
 }
 
 fn usage() {
-    eprintln!(concat!("cargo-why ", env!("CARGO_PKG_VERSION"), r#"
+    eprintln!(concat!(
+        "cargo-why ",
+        env!("CARGO_PKG_VERSION"),
+        r#"
 
 USAGE:
     cargo why <target crate> [other cargo flags (features, offline, etc)...]
 
 FLAGS:
     -h, --help       Prints help information
-"#));
+"#
+    ));
 }
 
-fn search(history: Vec<&PackageId>, resolve: &Resolve, target: &str) {
+fn print_chains(chains: &Vec<Vec<&PackageId>>, metadata: &Metadata) {
+    let mut print_versions: HashSet<&PackageId> = HashSet::new();
+    let mut name_to_pkgid: HashMap<&str, &PackageId> = HashMap::new();
+
+    for chain in chains {
+        for pkg_id in chain {
+            let pkg = &metadata[pkg_id];
+
+            let found_id = name_to_pkgid.entry(&pkg.name[..]).or_insert(pkg_id);
+
+            if pkg_id != found_id {
+                print_versions.insert(pkg_id);
+                print_versions.insert(found_id);
+            }
+        }
+    }
+
+    for chain in chains {
+        let mut chain_iter = chain.iter();
+
+        let pkg_id = chain_iter.next().unwrap();
+        let pkg = &metadata[pkg_id];
+
+        print!("{}", pkg.name);
+        if print_versions.contains(pkg_id) {
+            print!(" {}", pkg.version);
+        }
+        for pkg_id in chain_iter {
+            let pkg = &metadata[pkg_id];
+
+            print!(" -> {}", pkg.name);
+            if print_versions.contains(pkg_id) {
+                print!(" {}", pkg.version);
+            }
+        }
+        println!();
+    }
+}
+
+fn search<'a>(
+    history: Vec<&'a PackageId>,
+    resolve: &'a Resolve,
+    target: &str,
+    chains: &mut Vec<Vec<&'a PackageId>>,
+) {
     let curr = match history.last() {
         Some(&x) => x,
         None => return,
@@ -68,15 +124,16 @@ fn search(history: Vec<&PackageId>, resolve: &Resolve, target: &str) {
     };
     for dep in &node.dependencies {
         if dep.repr.contains(&format!("{} ", target)) {
-            for pkg in &history {
-                let pkg = pkg.repr.split(' ').nth(0).unwrap();
-                print!("{} -> ", pkg);
-            }
-            println!("{}", target);
+            let mut chain = Vec::new();
+
+            chain.extend(&history);
+            chain.push(dep);
+
+            chains.push(chain);
         } else {
             let mut history = history.clone();
             history.push(dep);
-            search(history, resolve, target);
+            search(history, resolve, target, chains);
         }
     }
 }
